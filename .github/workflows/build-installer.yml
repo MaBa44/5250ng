@@ -12,7 +12,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           repository: MaBa44/5250ng
-          ref: 1.2.0-fix
+          ref: main
           fetch-depth: 0
           submodules: recursive
 
