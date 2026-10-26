@@ -50,6 +50,8 @@ class TestSessionConfig : public QObject {
     void testConnectionOptionsDefaults();
     void testConnectionOptionsRoundTrip();
     void testConnectionOptionsOutOfRangeFallBack();
+    void testEnvironVariablesDefaults();
+    void testEnvironVariablesRoundTrip();
     void testDistinctNamesDoNotCollideOnDisk();
     void testLegacySessionFilenameLoads();
     void testSavedSessionPermissions();
@@ -660,6 +662,58 @@ void TestSessionConfig::testConnectionOptionsOutOfRangeFallBack() {
     QCOMPARE(loaded.autoReconnect(), false);
     QCOMPARE(loaded.autoReconnectDelaySeconds(), 5);
     QCOMPARE(loaded.autoReconnectMaxAttempts(), 5);
+}
+
+void TestSessionConfig::testEnvironVariablesDefaults() {
+    // Fresh configs send no NEW_ENVIRON bypass variables, and configs
+    // written by an earlier build (without the keys) load the same way.
+    QVERIFY(m_config->environUser().isEmpty());
+    QVERIFY(m_config->environCurrentLibrary().isEmpty());
+    QVERIFY(m_config->environInitialMenu().isEmpty());
+    QVERIFY(m_config->environProgram().isEmpty());
+
+    m_config->setHostname("host.example.com");
+    QJsonObject json = m_config->toJson();
+    for (const char *key : {"environUser", "environCurrentLibrary",
+                            "environInitialMenu", "environProgram"})
+        QVERIFY2(!json.contains(key), key);
+
+    SessionConfig loaded;
+    QVERIFY(loaded.fromJson(json));
+    QVERIFY(loaded.environUser().isEmpty());
+    QVERIFY(loaded.environCurrentLibrary().isEmpty());
+    QVERIFY(loaded.environInitialMenu().isEmpty());
+    QVERIFY(loaded.environProgram().isEmpty());
+}
+
+void TestSessionConfig::testEnvironVariablesRoundTrip() {
+    m_config->setName("Bypass");
+    m_config->setHostname("host.example.com");
+    m_config->setEnvironUser("OPERATOR");
+    m_config->setEnvironCurrentLibrary("MYLIB");
+    m_config->setEnvironInitialMenu("MAIN");
+    m_config->setEnvironProgram("STARTUP");
+
+    SessionConfig loaded;
+    QVERIFY(loaded.fromJson(m_config->toJson()));
+    SessionConfig copy(loaded);
+    SessionConfig assigned;
+    assigned = loaded;
+    for (const SessionConfig *c : {&loaded, &copy, &assigned}) {
+        QCOMPARE(c->environUser(), QString("OPERATOR"));
+        QCOMPARE(c->environCurrentLibrary(), QString("MYLIB"));
+        QCOMPARE(c->environInitialMenu(), QString("MAIN"));
+        QCOMPARE(c->environProgram(), QString("STARTUP"));
+    }
+
+    // Keys absent from the JSON leave a fresh config empty.
+    QJsonObject reset;
+    reset["name"] = "Reset";
+    reset["hostname"] = "a.example.com";
+    reset["port"] = 23;
+    SessionConfig fresh;
+    QVERIFY(fresh.fromJson(reset));
+    QVERIFY(fresh.environUser().isEmpty());
 }
 
 QTEST_MAIN(TestSessionConfig)

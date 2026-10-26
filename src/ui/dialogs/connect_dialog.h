@@ -105,6 +105,10 @@ class ConnectDialog : public qt_ui_style::BaseFramelessDialog {
     QRadioButton *m_pcCmdAllowAlwaysRadio;
     QLineEdit *m_usernameEdit;
     QLineEdit *m_passwordEdit;
+    QLineEdit *m_environUserEdit;            // NEW_ENVIRON VAR USER
+    QLineEdit *m_environCurrentLibraryEdit;  // NEW_ENVIRON USERVAR IBMCURLIB
+    QLineEdit *m_environInitialMenuEdit;     // NEW_ENVIRON USERVAR IBMIMENU
+    QLineEdit *m_environProgramEdit;         // NEW_ENVIRON USERVAR IBMPROGRAM
     QComboBox *m_deviceCombo;
     QLineEdit *m_customDeviceEdit;   // Device type (only for "Custom device")
     QLabel *m_customDeviceLabel;     // Label for custom device type row

@@ -89,6 +89,21 @@ class TN5250Client : public QObject {
     QString username() const { return m_username; }
     QString password() const { return m_password; }
 
+    // NEW_ENVIRON bypass sign-on variables (tn5250j compatible). Each is
+    // sent in the NEW_ENVIRON subnegotiation only when non-empty:
+    // USER as VAR, IBMCURLIB/IBMIMENU/IBMPROGRAM as USERVAR.
+    void setEnvironUser(const QString &user) { m_environUser = user; }
+    QString environUser() const { return m_environUser; }
+
+    void setEnvironCurrentLibrary(const QString &library) { m_environCurrentLibrary = library; }
+    QString environCurrentLibrary() const { return m_environCurrentLibrary; }
+
+    void setEnvironInitialMenu(const QString &menu) { m_environInitialMenu = menu; }
+    QString environInitialMenu() const { return m_environInitialMenu; }
+
+    void setEnvironProgram(const QString &program) { m_environProgram = program; }
+    QString environProgram() const { return m_environProgram; }
+
     // EBCDIC code page for this session (used in NEW_ENVIRON and password encryption)
     void setCodePage(core::CodePage::ID cp) { m_codePage = cp; }
     core::CodePage::ID codePage() const { return m_codePage; }
@@ -186,6 +201,10 @@ class TN5250Client : public QObject {
     QString m_terminalType = QStringLiteral("IBM-3179-2");
     QString m_username;
     QString m_password;
+    QString m_environUser;
+    QString m_environCurrentLibrary;
+    QString m_environInitialMenu;
+    QString m_environProgram;
     core::CodePage::ID m_codePage = core::CodePage::ID::CP037;
 
     // IBMRSEED state (RFC 4777)
