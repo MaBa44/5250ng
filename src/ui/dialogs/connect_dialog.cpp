@@ -343,6 +343,45 @@ void ConnectDialog::setupUI() {
     pcCmdGroup->setLayout(pcCmdLayout);
     const int pcCommandsPage = addPage(pcCmdGroup);
 
+    // TN5250 Environment (NEW_ENVIRON bypass sign-on) — tn5250j compatible.
+    // Each value is sent in the NEW_ENVIRON subnegotiation only when set;
+    // empty fields are omitted entirely. USER goes as VAR, the rest as
+    // USERVAR (IBMCURLIB/IBMIMENU/IBMPROGRAM).
+    QGroupBox *envGroup = new QGroupBox("TN5250 Environment (NEW_ENVIRON)", this);
+    QFormLayout *envLayout = new QFormLayout(envGroup);
+    QLabel *envNote = new QLabel(
+        "Bypass sign-on variables sent when the host requests NEW_ENVIRON. "
+        "Leave a field empty to not send it. Names are up to 10 characters.",
+        this);
+    envNote->setWordWrap(true);
+    envLayout->addRow(envNote);
+    m_environUserEdit = new QLineEdit(this);
+    m_environUserEdit->setPlaceholderText("(not sent)");
+    m_environUserEdit->setMaxLength(10);
+    m_environUserEdit->setToolTip(
+        "Sent as NEW_ENVIRON VAR \"USER\". User profile for bypass sign-on.");
+    envLayout->addRow("User (USER):", m_environUserEdit);
+    m_environCurrentLibraryEdit = new QLineEdit(this);
+    m_environCurrentLibraryEdit->setPlaceholderText("(not sent)");
+    m_environCurrentLibraryEdit->setMaxLength(10);
+    m_environCurrentLibraryEdit->setToolTip(
+        "Sent as NEW_ENVIRON USERVAR \"IBMCURLIB\". Initial current library.");
+    envLayout->addRow("Current library (IBMCURLIB):", m_environCurrentLibraryEdit);
+    m_environInitialMenuEdit = new QLineEdit(this);
+    m_environInitialMenuEdit->setPlaceholderText("(not sent)");
+    m_environInitialMenuEdit->setMaxLength(10);
+    m_environInitialMenuEdit->setToolTip(
+        "Sent as NEW_ENVIRON USERVAR \"IBMIMENU\". Initial menu.");
+    envLayout->addRow("Initial menu (IBMIMENU):", m_environInitialMenuEdit);
+    m_environProgramEdit = new QLineEdit(this);
+    m_environProgramEdit->setPlaceholderText("(not sent)");
+    m_environProgramEdit->setMaxLength(10);
+    m_environProgramEdit->setToolTip(
+        "Sent as NEW_ENVIRON USERVAR \"IBMPROGRAM\". Program to call at sign-on.");
+    envLayout->addRow("Program to call (IBMPROGRAM):", m_environProgramEdit);
+    envGroup->setLayout(envLayout);
+    const int environPage = addPage(envGroup);
+
     // Terminal theme group
     QGroupBox *themeGroup = new QGroupBox("Terminal Theme", this);
     QFormLayout *themeLayout = new QFormLayout(themeGroup);
@@ -451,6 +490,7 @@ void ConnectDialog::setupUI() {
     addCategory(connectionCategory, "TLS Certificates", tlsPage);
     addCategory(connectionCategory, "Timeouts & Reconnect", reliabilityPage);
     addCategory(connectionCategory, "PC Commands", pcCommandsPage);
+    addCategory(connectionCategory, "Environment", environPage);
     connectionCategory->setExpanded(true);
 
     QTreeWidgetItem *terminalCategory = addCategory(nullptr, "Terminal", displayPage);
@@ -545,6 +585,11 @@ void ConnectDialog::updateUI() {
     m_tlsClientCertEdit->setText(m_currentConfig.tlsClientCertificateFile());
     m_tlsClientKeyEdit->setText(m_currentConfig.tlsClientKeyFile());
     m_passwordEdit->setText(m_currentConfig.password());
+    // NEW_ENVIRON bypass sign-on variables
+    m_environUserEdit->setText(m_currentConfig.environUser());
+    m_environCurrentLibraryEdit->setText(m_currentConfig.environCurrentLibrary());
+    m_environInitialMenuEdit->setText(m_currentConfig.environInitialMenu());
+    m_environProgramEdit->setText(m_currentConfig.environProgram());
     // Select device type in combo if supported
     int idx = m_deviceCombo->findText(m_currentConfig.deviceType());
     if (idx >= 0) {
@@ -640,6 +685,10 @@ session::SessionConfig ConnectDialog::getSessionConfig() const {
     config.setScreenCols(m_colsSpin->value());
     config.setUsername(m_usernameEdit->text());
     config.setPassword(m_passwordEdit->text());
+    config.setEnvironUser(m_environUserEdit->text().trimmed());
+    config.setEnvironCurrentLibrary(m_environCurrentLibraryEdit->text().trimmed());
+    config.setEnvironInitialMenu(m_environInitialMenuEdit->text().trimmed());
+    config.setEnvironProgram(m_environProgramEdit->text().trimmed());
     config.setCodePage(static_cast<core::CodePage::ID>(
         m_codePageCombo->currentData().toInt()));
     config.setTerminalThemeId(m_themeCombo->currentData().toString());

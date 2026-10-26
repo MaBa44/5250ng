@@ -174,6 +174,34 @@ void TN5250Client::sendNewEnviron() {
     negotiation.append(static_cast<uint8_t>(0x01)); // VALUE
     negotiation.append("697");
 
+    // Bypass sign-on variables (tn5250j compatible). Each is sent only when
+    // set in the session configuration; empty values are omitted entirely.
+    // USER goes as VAR (0x00), the rest as USERVAR (0x03) — mirroring
+    // tnvt.java negNewEnvironment(). Values are ESC-escaped per RFC 1572
+    // like every other user-supplied NEW_ENVIRON value in this function.
+    if (!m_environUser.isEmpty()) {
+        negotiation.append(static_cast<uint8_t>(0x00)); // VAR
+        negotiation.append("USER");
+        negotiation.append(static_cast<uint8_t>(0x01)); // VALUE
+        negotiation.append(IBMRSeed::escapeNewEnviron(m_environUser.toUtf8()));
+    }
+    const struct {
+        const char *name;
+        const QString &value;
+    } environVars[] = {
+        {"IBMCURLIB", m_environCurrentLibrary},
+        {"IBMIMENU", m_environInitialMenu},
+        {"IBMPROGRAM", m_environProgram},
+    };
+    for (const auto &var : environVars) {
+        if (var.value.isEmpty())
+            continue;
+        negotiation.append(static_cast<uint8_t>(0x03)); // USERVAR
+        negotiation.append(var.name);
+        negotiation.append(static_cast<uint8_t>(0x01)); // VALUE
+        negotiation.append(IBMRSeed::escapeNewEnviron(var.value.toUtf8()));
+    }
+
     negotiation.append(static_cast<uint8_t>(TelnetCommand::IAC));
     negotiation.append(static_cast<uint8_t>(TelnetCommand::SE));
 
@@ -181,10 +209,15 @@ void TN5250Client::sendNewEnviron() {
         m_socket->write(negotiation);
         logger::Logger::instance()->debug(
             QString("[TN5250->Client]: Sent NEW_ENVIRON: DEVNAME=%1 IBMRSEED=%2"
-                    " IBMSUBSVAR=(empty) KBDTYPE=USB CODEPAGE=%3 CHARSET=697")
+                    " IBMSUBSVAR=(empty) KBDTYPE=USB CODEPAGE=%3 CHARSET=697"
+                    " USER=%4 IBMCURLIB=%5 IBMIMENU=%6 IBMPROGRAM=%7")
                 .arg(m_deviceName.isEmpty() ? "(auto)" : m_deviceName)
                 .arg(encrypted ? "encrypted" : "(empty)")
-                .arg(static_cast<int>(m_codePage)));
+                .arg(static_cast<int>(m_codePage))
+                .arg(m_environUser.isEmpty() ? "(not sent)" : m_environUser)
+                .arg(m_environCurrentLibrary.isEmpty() ? "(not sent)" : m_environCurrentLibrary)
+                .arg(m_environInitialMenu.isEmpty() ? "(not sent)" : m_environInitialMenu)
+                .arg(m_environProgram.isEmpty() ? "(not sent)" : m_environProgram));
     }
 }
 

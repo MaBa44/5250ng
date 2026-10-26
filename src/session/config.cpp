@@ -23,7 +23,7 @@ namespace session {
 
 SessionConfig::SessionConfig(QObject *parent) : QObject(parent), m_name("New Session"), m_hostname(""), m_port(23), m_useTLS(false), m_deviceType("IBM-3179-2"), m_deviceName(""), m_screenRows(24), m_screenCols(80), m_codePage(core::CodePage::ID::CP037), m_terminalThemeId("classic_green") {}
 
-SessionConfig::SessionConfig(const SessionConfig &other) : QObject(other.parent()), m_name(other.m_name), m_hostname(other.m_hostname), m_port(other.m_port), m_useTLS(other.m_useTLS), m_allowInvalidCertificates(other.m_allowInvalidCertificates), m_deviceType(other.m_deviceType), m_deviceName(other.m_deviceName), m_screenRows(other.m_screenRows), m_screenCols(other.m_screenCols), m_codePage(other.m_codePage), m_terminalThemeId(other.m_terminalThemeId), m_startupScriptSource(other.m_startupScriptSource), m_startupScriptName(other.m_startupScriptName), m_startupScriptPath(other.m_startupScriptPath), m_startupScriptLinked(other.m_startupScriptLinked), m_startupScriptTrigger(other.m_startupScriptTrigger), m_startupScriptOnReconnect(other.m_startupScriptOnReconnect), m_sessionVariables(other.m_sessionVariables), m_username(other.m_username), m_password(other.m_password), m_pcCommandPolicy(other.m_pcCommandPolicy), m_connectTimeoutSeconds(other.m_connectTimeoutSeconds), m_keepaliveIntervalSeconds(other.m_keepaliveIntervalSeconds), m_autoReconnect(other.m_autoReconnect), m_autoReconnectDelaySeconds(other.m_autoReconnectDelaySeconds), m_autoReconnectMaxAttempts(other.m_autoReconnectMaxAttempts), m_tlsCaCertificateFile(other.m_tlsCaCertificateFile), m_tlsClientCertificateFile(other.m_tlsClientCertificateFile), m_tlsClientKeyFile(other.m_tlsClientKeyFile), m_replayPcapFile(other.m_replayPcapFile) {}
+SessionConfig::SessionConfig(const SessionConfig &other) : QObject(other.parent()), m_name(other.m_name), m_hostname(other.m_hostname), m_port(other.m_port), m_useTLS(other.m_useTLS), m_allowInvalidCertificates(other.m_allowInvalidCertificates), m_deviceType(other.m_deviceType), m_deviceName(other.m_deviceName), m_screenRows(other.m_screenRows), m_screenCols(other.m_screenCols), m_codePage(other.m_codePage), m_terminalThemeId(other.m_terminalThemeId), m_startupScriptSource(other.m_startupScriptSource), m_startupScriptName(other.m_startupScriptName), m_startupScriptPath(other.m_startupScriptPath), m_startupScriptLinked(other.m_startupScriptLinked), m_startupScriptTrigger(other.m_startupScriptTrigger), m_startupScriptOnReconnect(other.m_startupScriptOnReconnect), m_sessionVariables(other.m_sessionVariables), m_username(other.m_username), m_password(other.m_password), m_environUser(other.m_environUser), m_environCurrentLibrary(other.m_environCurrentLibrary), m_environInitialMenu(other.m_environInitialMenu), m_environProgram(other.m_environProgram), m_pcCommandPolicy(other.m_pcCommandPolicy), m_connectTimeoutSeconds(other.m_connectTimeoutSeconds), m_keepaliveIntervalSeconds(other.m_keepaliveIntervalSeconds), m_autoReconnect(other.m_autoReconnect), m_autoReconnectDelaySeconds(other.m_autoReconnectDelaySeconds), m_autoReconnectMaxAttempts(other.m_autoReconnectMaxAttempts), m_tlsCaCertificateFile(other.m_tlsCaCertificateFile), m_tlsClientCertificateFile(other.m_tlsClientCertificateFile), m_tlsClientKeyFile(other.m_tlsClientKeyFile), m_replayPcapFile(other.m_replayPcapFile) {}
 
 SessionConfig &SessionConfig::operator=(const SessionConfig &other) {
     if (this != &other) {
@@ -47,6 +47,10 @@ SessionConfig &SessionConfig::operator=(const SessionConfig &other) {
         m_sessionVariables = other.m_sessionVariables;
         m_username = other.m_username;
         m_password = other.m_password;
+        m_environUser = other.m_environUser;
+        m_environCurrentLibrary = other.m_environCurrentLibrary;
+        m_environInitialMenu = other.m_environInitialMenu;
+        m_environProgram = other.m_environProgram;
         m_pcCommandPolicy = other.m_pcCommandPolicy;
         m_connectTimeoutSeconds = other.m_connectTimeoutSeconds;
         m_keepaliveIntervalSeconds = other.m_keepaliveIntervalSeconds;
@@ -126,6 +130,16 @@ QJsonObject SessionConfig::toJson() const {
         json["username"] = m_username;
     if (!m_password.isEmpty())
         json["password"] = m_password;
+    // NEW_ENVIRON bypass sign-on variables: persist only when set, so
+    // existing session files gain no new keys on first save.
+    if (!m_environUser.isEmpty())
+        json["environUser"] = m_environUser;
+    if (!m_environCurrentLibrary.isEmpty())
+        json["environCurrentLibrary"] = m_environCurrentLibrary;
+    if (!m_environInitialMenu.isEmpty())
+        json["environInitialMenu"] = m_environInitialMenu;
+    if (!m_environProgram.isEmpty())
+        json["environProgram"] = m_environProgram;
     // Only persist the policy when it diverges from the default (DenyAndAlert),
     // so existing config files do not gain a surprising new key on first save.
     if (m_pcCommandPolicy != PcCommandPolicy::DenyAndAlert)
@@ -249,6 +263,21 @@ bool SessionConfig::fromJson(const QJsonObject &json) {
     }
     if (json.contains("password") && json["password"].isString()) {
         m_password = json["password"].toString();
+    }
+    // NEW_ENVIRON bypass sign-on variables. Absent keys leave the current
+    // value untouched at construction (empty for a fresh config); a present
+    // string — even empty — is taken as-is so clearing a field persists.
+    if (json.contains("environUser") && json["environUser"].isString()) {
+        m_environUser = json["environUser"].toString();
+    }
+    if (json.contains("environCurrentLibrary") && json["environCurrentLibrary"].isString()) {
+        m_environCurrentLibrary = json["environCurrentLibrary"].toString();
+    }
+    if (json.contains("environInitialMenu") && json["environInitialMenu"].isString()) {
+        m_environInitialMenu = json["environInitialMenu"].toString();
+    }
+    if (json.contains("environProgram") && json["environProgram"].isString()) {
+        m_environProgram = json["environProgram"].toString();
     }
     // STRPCCMD policy. Prefer the new "pcCommandPolicy" string field; fall
     // back to the older boolean pair for configs written by an earlier build:

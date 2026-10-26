@@ -130,6 +130,22 @@ class SessionConfig : public QObject {
     QString password() const { return m_password; }
     void setPassword(const QString &password) { m_password = password; }
 
+    // NEW_ENVIRON bypass sign-on variables (tn5250j compatible). Each is
+    // sent in the NEW_ENVIRON subnegotiation only when non-empty:
+    // USER as VAR, IBMCURLIB/IBMIMENU/IBMPROGRAM as USERVAR.
+    // Empty = the variable is not sent at all.
+    QString environUser() const { return m_environUser; }
+    void setEnvironUser(const QString &user) { m_environUser = user; }
+
+    QString environCurrentLibrary() const { return m_environCurrentLibrary; }
+    void setEnvironCurrentLibrary(const QString &library) { m_environCurrentLibrary = library; }
+
+    QString environInitialMenu() const { return m_environInitialMenu; }
+    void setEnvironInitialMenu(const QString &menu) { m_environInitialMenu = menu; }
+
+    QString environProgram() const { return m_environProgram; }
+    void setEnvironProgram(const QString &program) { m_environProgram = program; }
+
     // STRPCCMD policy. Default is Deny because this is the mechanism behind
     // CVE-2005-0868. See the PcCommandPolicy enum for the four states.
     PcCommandPolicy pcCommandPolicy() const { return m_pcCommandPolicy; }
@@ -219,6 +235,10 @@ class SessionConfig : public QObject {
     QHash<QString, QString> m_sessionVariables;
     QString m_username;
     QString m_password;
+    QString m_environUser;
+    QString m_environCurrentLibrary;
+    QString m_environInitialMenu;
+    QString m_environProgram;
     PcCommandPolicy m_pcCommandPolicy = PcCommandPolicy::DenyAndAlert;
     int m_connectTimeoutSeconds = kDefaultConnectTimeoutSeconds;
     int m_keepaliveIntervalSeconds = kDefaultKeepaliveIntervalSeconds;

@@ -69,6 +69,10 @@ void Worker::createClientAndConnect() {
     }
     m_client->setTerminalType(termType);
     m_client->setCredentials(m_config.username(), m_config.password());
+    m_client->setEnvironUser(m_config.environUser());
+    m_client->setEnvironCurrentLibrary(m_config.environCurrentLibrary());
+    m_client->setEnvironInitialMenu(m_config.environInitialMenu());
+    m_client->setEnvironProgram(m_config.environProgram());
     m_client->setCodePage(m_config.codePage());
     m_client->setAllowInvalidCertificates(m_config.allowInvalidCertificates());
     m_client->setConnectTimeout(m_config.connectTimeoutSeconds() * 1000);
