@@ -345,126 +345,18 @@ void TN5250StreamRenderer::render(const QByteArray &data) {
         }
 
         case 0x15: { // WDSF - Write to Display Structured Field
+            // Real wire layout: 0x15 LEN-hi LEN-lo 0xD9 TYPE ...
+            // (LEN covers the length bytes themselves through the payload).
             if (i + 2 >= data.size()) {
                 i = data.size();
                 break;
             }
             int wdsfLen = (static_cast<uint8_t>(data[i + 1]) << 8) |
                            static_cast<uint8_t>(data[i + 2]);
-            if (wdsfLen < 2) wdsfLen = 2;
-
-            // Parse WDSF minor type if available
-            int wdsfStart = i + 3; // Past order + 2-byte length
+            if (wdsfLen < 4) wdsfLen = 4; // need at least the D9 + TYPE bytes
             int wdsfEnd = i + 1 + wdsfLen;
             if (wdsfEnd > data.size()) wdsfEnd = data.size();
-
-            if (wdsfStart < wdsfEnd) {
-                uint8_t wdsfType = static_cast<uint8_t>(data[wdsfStart]);
-                LOG_DEBUG(QString("[StreamRenderer] WDSF: len=%1 type=0x%2")
-                    .arg(wdsfLen).arg(wdsfType, 2, 16, QChar('0')));
-
-                if (wdsfType == 0x51) {
-                    // Create Window (0xD9/0x51)
-                    // Parse window depth, width, and border characters
-                    int wi = wdsfStart + 1;
-                    // Flags byte
-                    uint8_t wflags = (wi < wdsfEnd) ? static_cast<uint8_t>(data[wi++]) : 0;
-                    Q_UNUSED(wflags);
-                    // Reserved
-                    if (wi < wdsfEnd) wi++;
-                    // Window depth (rows) and width (cols)
-                    uint8_t winDepth = (wi < wdsfEnd) ? static_cast<uint8_t>(data[wi++]) : 0;
-                    uint8_t winWidth = (wi < wdsfEnd) ? static_cast<uint8_t>(data[wi++]) : 0;
-
-                    LOG_DEBUG(QString("[StreamRenderer] WDSF CreateWindow: depth=%1 width=%2 at (%3,%4)")
-                        .arg(winDepth).arg(winWidth).arg(currentRow).arg(currentCol));
-
-                    if (winDepth > 0 && winWidth > 0) {
-                        // Draw window borders
-                        // Default border chars: TL='.', TR='.', BL=':', BR=':', H='-', V='|'
-                        // EBCDIC: '-'=0x60, '|'=0x4F, '.'=0x4B, ':'=0x7A
-                        uint8_t borderH = 0x60;  // '-'
-                        uint8_t borderV = 0x4F;  // '|'
-                        uint8_t borderTL = 0x4B; // '.'
-                        uint8_t borderTR = 0x4B; // '.'
-                        uint8_t borderBL = 0x7A; // ':'
-                        uint8_t borderBR = 0x7A; // ':'
-
-                        // Parse optional border presentation minor structure
-                        while (wi + 1 < wdsfEnd) {
-                            uint8_t minorLen = static_cast<uint8_t>(data[wi]);
-                            uint8_t minorType = static_cast<uint8_t>(data[wi + 1]);
-                            if (minorType == 0x01 && minorLen >= 8 && wi + minorLen <= wdsfEnd) {
-                                // Border presentation - extract border characters
-                                // Skip flags (2 bytes), then: TL, T, TR, L, R, BL, B, BR
-                                int bci = wi + 4; // past len, type, 2 flag bytes
-                                if (bci + 7 < wi + minorLen) {
-                                    borderTL = static_cast<uint8_t>(data[bci]);
-                                    borderH  = static_cast<uint8_t>(data[bci + 1]);
-                                    borderTR = static_cast<uint8_t>(data[bci + 2]);
-                                    borderV  = static_cast<uint8_t>(data[bci + 3]);
-                                    // bci+4 = right border (same as left)
-                                    borderBL = static_cast<uint8_t>(data[bci + 5]);
-                                    // bci+6 = bottom border (same as top)
-                                    borderBR = static_cast<uint8_t>(data[bci + 7]);
-                                }
-                            }
-                            wi += minorLen;
-                            if (minorLen == 0) break; // prevent infinite loop
-                        }
-
-                        // Top row - SBA already set the window start position
-                        // Adjust for border: window top-left is (currentRow-1, currentCol-1)
-                        int winStartRow = currentRow;
-                        int winStartCol = currentCol;
-
-                        ui::widgets::CellAttributes borderAttr;
-                        borderAttr.color = 10; // Green borders
-                        borderAttr.protected_field = true;
-
-                        // Top border
-                        if (winStartRow > 0) {
-                            int borderRow = winStartRow - 1;
-                            if (winStartCol > 0)
-                                screen->writeChar(borderRow, winStartCol - 1, borderTL, borderAttr);
-                            for (int c = 0; c < winWidth && winStartCol + c < screen->cols(); ++c)
-                                screen->writeChar(borderRow, winStartCol + c, borderH, borderAttr);
-                            if (winStartCol + winWidth < screen->cols())
-                                screen->writeChar(borderRow, winStartCol + winWidth, borderTR, borderAttr);
-                        }
-
-                        // Side borders
-                        for (int r = 0; r < winDepth && winStartRow + r < screen->rows(); ++r) {
-                            int bRow = winStartRow + r;
-                            if (winStartCol > 0)
-                                screen->writeChar(bRow, winStartCol - 1, borderV, borderAttr);
-                            if (winStartCol + winWidth < screen->cols())
-                                screen->writeChar(bRow, winStartCol + winWidth, borderV, borderAttr);
-                        }
-
-                        // Bottom border
-                        if (winStartRow + winDepth < screen->rows()) {
-                            int borderRow = winStartRow + winDepth;
-                            if (winStartCol > 0)
-                                screen->writeChar(borderRow, winStartCol - 1, borderBL, borderAttr);
-                            for (int c = 0; c < winWidth && winStartCol + c < screen->cols(); ++c)
-                                screen->writeChar(borderRow, winStartCol + c, borderH, borderAttr);
-                            if (winStartCol + winWidth < screen->cols())
-                                screen->writeChar(borderRow, winStartCol + winWidth, borderBR, borderAttr);
-                        }
-                    }
-                } else if (wdsfType == 0x5F) {
-                    // Remove GUI Window (0xD9/0x5F)
-                    LOG_DEBUG("[StreamRenderer] WDSF RemoveGUI");
-                    // No action needed - host will redraw underlying screen
-                } else {
-                    LOG_DEBUG(QString("[StreamRenderer] WDSF: unhandled type 0x%1")
-                        .arg(wdsfType, 2, 16, QChar('0')));
-                }
-            } else {
-                LOG_DEBUG(QString("[StreamRenderer] WDSF: len=%1 (no type byte)").arg(wdsfLen));
-            }
-
+            handleWdsfBytes(data, i, wdsfEnd, currentRow, currentCol, currentAttr, screen);
             i = wdsfEnd;
             break;
         }
@@ -605,6 +497,306 @@ void TN5250StreamRenderer::render(const QByteArray &data) {
 
     // Notify screen changed
     m_widget->update();
+}
+
+namespace {
+
+// Bounds-checked single-cell write: the screen buffer has no release-mode
+// bounds check, so every GUI write goes through here.
+void putCell(ui::widgets::ScreenBuffer *screen, int row, int col, uint8_t ebcdic,
+             const ui::widgets::CellAttributes &attr) {
+    if (!screen || row < 0 || col < 0 || row >= screen->rows() || col >= screen->cols())
+        return;
+    screen->writeChar(row, col, ebcdic, attr);
+}
+
+} // namespace
+
+void TN5250StreamRenderer::renderWdsfOrder(const QByteArray &order, int cursorRow, int cursorCol) {
+    if (!m_widget || !m_widget->screenBuffer() || order.size() < 5)
+        return;
+    const int wdsfLen = (static_cast<uint8_t>(order[1]) << 8) | static_cast<uint8_t>(order[2]);
+    int wdsfEnd = 1 + (wdsfLen < 4 ? 4 : wdsfLen);
+    if (wdsfEnd > order.size())
+        wdsfEnd = order.size();
+    ui::widgets::CellAttributes attr;
+    handleWdsfBytes(order, 0, wdsfEnd, cursorRow, cursorCol, attr, m_widget->screenBuffer());
+    m_widget->update();
+}
+
+void TN5250StreamRenderer::handleWdsfBytes(const QByteArray &data, int orderStart, int orderEnd,
+                                           int cursorRow, int cursorCol,
+                                           const ui::widgets::CellAttributes &attr,
+                                           ui::widgets::ScreenBuffer *screen) {
+    // Real wire layout: 0x15 LEN-hi LEN-lo 0xD9 TYPE ...
+    if (orderStart + 4 >= orderEnd) {
+        LOG_DEBUG("[StreamRenderer] WDSF: truncated order");
+        return;
+    }
+    if (static_cast<uint8_t>(data[orderStart]) != 0x15
+        || static_cast<uint8_t>(data[orderStart + 3]) != 0xD9) {
+        LOG_DEBUG("[StreamRenderer] WDSF: not a 0xD9 GUI structured field");
+        return;
+    }
+    const uint8_t wdsfType = static_cast<uint8_t>(data[orderStart + 4]);
+    const int body = orderStart + 5; // past 0x15 LEN LEN 0xD9 TYPE
+    LOG_DEBUG(QString("[StreamRenderer] WDSF: type=0x%1 at (%2,%3)")
+        .arg(wdsfType, 2, 16, QChar('0')).arg(cursorRow).arg(cursorCol));
+    switch (wdsfType) {
+    case 0x51:
+        drawWdsfWindow(data, body, orderEnd, cursorRow, cursorCol, screen);
+        break;
+    case 0x50:
+        drawWdsfSelectionField(data, body, orderEnd, cursorRow, cursorCol, attr, screen);
+        break;
+    case 0x53:
+        drawWdsfScrollBar(data, body, orderEnd, cursorRow, cursorCol, screen);
+        break;
+    case 0x59:
+        // Remove GUI window: the host repaints the underlying screen itself.
+        LOG_DEBUG("[StreamRenderer] WDSF RemoveWindow (0xD9/0x59)");
+        break;
+    case 0x5B:
+        // Remove GUI scroll bar: host repaints.
+        LOG_DEBUG("[StreamRenderer] WDSF RemoveScrollBar (0xD9/0x5B)");
+        break;
+    case 0x5F:
+        // Remove all GUI constructs: host repaints.
+        LOG_DEBUG("[StreamRenderer] WDSF RemoveAllGUI (0xD9/0x5F)");
+        break;
+    case 0x60:
+        // Erase/Draw grid lines: not supported, skipped like tn5250j does.
+        LOG_DEBUG("[StreamRenderer] WDSF GridLines (0xD9/0x60) not supported");
+        break;
+    default:
+        LOG_DEBUG(QString("[StreamRenderer] WDSF: unhandled type 0x%1")
+            .arg(wdsfType, 2, 16, QChar('0')));
+        break;
+    }
+}
+
+void TN5250StreamRenderer::drawWdsfWindow(const QByteArray &data, int body, int end,
+                                          int cursorRow, int cursorCol,
+                                          ui::widgets::ScreenBuffer *screen) {
+    // Create Window: [flags][reserved][depth][width][minors...].
+    if (body + 3 >= end)
+        return;
+    int wi = body + 2; // skip flags + reserved
+    const int winDepth = static_cast<uint8_t>(data[wi++]);
+    const int winWidth = static_cast<uint8_t>(data[wi++]);
+    LOG_DEBUG(QString("[StreamRenderer] WDSF CreateWindow: depth=%1 width=%2 at (%3,%4)")
+        .arg(winDepth).arg(winWidth).arg(cursorRow).arg(cursorCol));
+    if (winDepth <= 0 || winWidth <= 0)
+        return;
+
+    // Border characters, overridable via the 0x01 minor structure.
+    // EBCDIC: '-'=0x60, '|'=0x4F, '.'=0x4B, ':'=0x7A
+    uint8_t borderH = 0x60;
+    uint8_t borderV = 0x4F;
+    uint8_t borderTL = 0x4B;
+    uint8_t borderTR = 0x4B;
+    uint8_t borderBL = 0x7A;
+    uint8_t borderBR = 0x7A;
+    // Optional window title/footer (0x10 minor): text + orientation.
+    QByteArray headerText;
+    QByteArray footerText;
+    uint8_t headerOrient = 0;
+    uint8_t footerOrient = 0;
+    while (wi + 1 < end) {
+        const int minorLen = static_cast<uint8_t>(data[wi]);
+        const uint8_t minorType = static_cast<uint8_t>(data[wi + 1]);
+        if (minorLen < 2 || wi + minorLen > end)
+            break;
+        if (minorType == 0x01 && minorLen >= 8) {
+            // Border presentation: past len, type, 2 flag bytes:
+            // TL, T, TR, L, R, BL, B, BR.
+            const int bci = wi + 4;
+            if (bci + 7 < wi + minorLen) {
+                borderTL = static_cast<uint8_t>(data[bci]);
+                borderH = static_cast<uint8_t>(data[bci + 1]);
+                borderTR = static_cast<uint8_t>(data[bci + 2]);
+                borderV = static_cast<uint8_t>(data[bci + 3]);
+                borderBL = static_cast<uint8_t>(data[bci + 5]);
+                borderBR = static_cast<uint8_t>(data[bci + 7]);
+            }
+        } else if (minorType == 0x10 && minorLen >= 7) {
+            // Window title/footer: [len][0x10][orient][mAttr][cAttr][res][text...].
+            // Orientation bits (tn5250j): 0xC0: 0x40 right, 0x80 left, else
+            // center; 0x20 set means footer, otherwise header.
+            const uint8_t orient = static_cast<uint8_t>(data[wi + 2]);
+            const QByteArray text = data.mid(wi + 6, minorLen - 6);
+            if ((orient & 0x20) != 0) {
+                footerText = text;
+                footerOrient = orient;
+            } else {
+                headerText = text;
+                headerOrient = orient;
+            }
+        }
+        wi += minorLen;
+        if (minorLen == 0)
+            break; // prevent infinite loop
+    }
+
+    ui::widgets::CellAttributes borderAttr;
+    borderAttr.color = 10; // Green borders
+    borderAttr.protected_field = true;
+
+    const int winStartRow = cursorRow;
+    const int winStartCol = cursorCol;
+    const bool hasTop = winStartRow > 0;
+    const int topRow = winStartRow - 1;
+    const bool hasBottom = winStartRow + winDepth < screen->rows();
+    const int bottomRow = winStartRow + winDepth;
+
+    auto drawBorderedText = [&](const QByteArray &text, uint8_t orient, int borderRow,
+                                bool haveBorder) {
+        if (text.isEmpty() || !haveBorder)
+            return;
+        // Clip the text to the inner window width.
+        const int maxLen = winWidth < 1 ? 0 : winWidth;
+        const int len = text.size() < maxLen ? text.size() : maxLen;
+        int startCol = winStartCol; // left (0x80)
+        if ((orient & 0xC0) == 0x40) { // right
+            startCol = winStartCol + winWidth - len;
+        } else if ((orient & 0xC0) != 0x80) { // center
+            startCol = winStartCol + (winWidth - len) / 2;
+        }
+        if (startCol < winStartCol)
+            startCol = winStartCol;
+        for (int k = 0; k < len && startCol + k < winStartCol + winWidth; ++k)
+            putCell(screen, borderRow, startCol + k,
+                    static_cast<uint8_t>(text[k]), borderAttr);
+    };
+
+    // Top border
+    if (hasTop) {
+        if (winStartCol > 0)
+            putCell(screen, topRow, winStartCol - 1, borderTL, borderAttr);
+        for (int c = 0; c < winWidth; ++c)
+            putCell(screen, topRow, winStartCol + c, borderH, borderAttr);
+        putCell(screen, topRow, winStartCol + winWidth, borderTR, borderAttr);
+        drawBorderedText(headerText, headerOrient, topRow, true);
+    }
+
+    // Side borders
+    for (int r = 0; r < winDepth; ++r) {
+        const int bRow = winStartRow + r;
+        if (winStartCol > 0)
+            putCell(screen, bRow, winStartCol - 1, borderV, borderAttr);
+        putCell(screen, bRow, winStartCol + winWidth, borderV, borderAttr);
+    }
+
+    // Bottom border
+    if (hasBottom) {
+        if (winStartCol > 0)
+            putCell(screen, bottomRow, winStartCol - 1, borderBL, borderAttr);
+        for (int c = 0; c < winWidth; ++c)
+            putCell(screen, bottomRow, winStartCol + c, borderH, borderAttr);
+        putCell(screen, bottomRow, winStartCol + winWidth, borderBR, borderAttr);
+        drawBorderedText(footerText, footerOrient, bottomRow, true);
+    }
+}
+
+void TN5250StreamRenderer::drawWdsfSelectionField(const QByteArray &data, int body, int end,
+                                                  int cursorRow, int cursorCol,
+                                                  const ui::widgets::CellAttributes &attr,
+                                                  ui::widgets::ScreenBuffer *screen) {
+    // Define Selection Field: 16 header bytes, then minor structures.
+    // [f1][f2][f3][typeSel][guiDev][withMnem][noMnem][res][res]
+    // [textCols][textRows][maxColChoice][padding][numSep][ctySep][cancelAID]
+    if (body + 16 > end)
+        return;
+    const int textCols = static_cast<uint8_t>(data[body + 9]);
+    const int textRows = static_cast<uint8_t>(data[body + 10]);
+    int maxColChoice = static_cast<uint8_t>(data[body + 11]);
+    const int padding = static_cast<uint8_t>(data[body + 12]);
+    if (maxColChoice < 1)
+        maxColChoice = 1;
+    LOG_DEBUG(QString("[StreamRenderer] WDSF SelectionField: %1x%2 maxCol=%3 at (%4,%5)")
+        .arg(textCols).arg(textRows).arg(maxColChoice).arg(cursorRow).arg(cursorCol));
+
+    ui::widgets::CellAttributes choiceAttr = attr;
+    choiceAttr.protected_field = true;
+    int rowCtr = 0;
+    int colCtr = 0;
+    int mi = body + 16;
+    while (mi + 1 < end) {
+        const int minorLen = static_cast<uint8_t>(data[mi]);
+        const uint8_t minorType = static_cast<uint8_t>(data[mi + 1]);
+        if (minorLen < 2 || mi + minorLen > end)
+            break;
+        if (minorType == 0x10) {
+            // Choice Text: [len][0x10][f1][f2][f3][optional bytes][text...].
+            int cnt = 5;
+            const uint8_t flagCT1 = minorLen > 2 ? static_cast<uint8_t>(data[mi + 2]) : 0;
+            if ((flagCT1 & 0x08) != 0)
+                cnt++; // mnemonic offset byte
+            if ((flagCT1 & 0x01) != 0)
+                cnt++; // single-digit number byte
+            if ((flagCT1 & 0x02) != 0)
+                cnt++; // double-digit number byte
+            const bool unavailable = (flagCT1 & 0x80) != 0;
+            const int textLen = minorLen - cnt;
+            const int r = cursorRow + rowCtr;
+            const int c = cursorCol + colCtr * (textCols + padding + 3);
+            if (!unavailable && textLen > 0) {
+                putCell(screen, r, c, 0x4B, choiceAttr); // '.' selection marker
+                for (int k = 0; k < textLen && k < textCols; ++k)
+                    putCell(screen, r, c + 3 + k,
+                            static_cast<uint8_t>(data[mi + cnt + k]), choiceAttr);
+            }
+            colCtr++;
+            if (colCtr >= maxColChoice) {
+                colCtr = 0;
+                rowCtr++;
+            }
+        }
+        mi += minorLen;
+        if (minorLen == 0)
+            break; // prevent infinite loop
+    }
+}
+
+void TN5250StreamRenderer::drawWdsfScrollBar(const QByteArray &data, int body, int end,
+                                             int cursorRow, int cursorCol,
+                                             ui::widgets::ScreenBuffer *screen) {
+    // Scroll Bar: [flag][res][totR-hi,lo][totC-hi,lo][sldR-hi,lo][sldC-hi,lo][sliderRC].
+    if (body + 11 > end)
+        return;
+    const int totalRows = (static_cast<uint8_t>(data[body + 2]) << 8)
+        | static_cast<uint8_t>(data[body + 3]);
+    const int sliderRow = (static_cast<uint8_t>(data[body + 6]) << 8)
+        | static_cast<uint8_t>(data[body + 7]);
+    LOG_DEBUG(QString("[StreamRenderer] WDSF ScrollBar: total=%1 slider=%2 at (%3,%4)")
+        .arg(totalRows).arg(sliderRow).arg(cursorRow).arg(cursorCol));
+
+    // Compact visual indicator: '+' ends, '|' track, '#' slider.
+    // EBCDIC: '+'=0x4E, '|'=0x4F, '#'=0x7C.
+    ui::widgets::CellAttributes barAttr;
+    barAttr.color = 10;
+    barAttr.protected_field = true;
+    int height = totalRows;
+    if (height < 3)
+        height = 3;
+    if (height > 12)
+        height = 12;
+    int sliderIdx = 0;
+    if (totalRows > 1) {
+        sliderIdx = (sliderRow * (height - 1)) / totalRows;
+        if (sliderIdx < 0)
+            sliderIdx = 0;
+        if (sliderIdx > height - 1)
+            sliderIdx = height - 1;
+    }
+    for (int k = 0; k < height; ++k) {
+        uint8_t ch = 0x4F; // '|'
+        if (k == sliderIdx)
+            ch = 0x7C; // '#'
+        if (k == 0 || k == height - 1)
+            ch = 0x4E; // '+'
+        putCell(screen, cursorRow + k, cursorCol, ch, barAttr);
+    }
 }
 
 } // namespace ui::rendering

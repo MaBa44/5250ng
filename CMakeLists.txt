@@ -58,6 +58,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     Core
     Widgets
     Network
+    PrintSupport
 )
 
 find_package(QtUiStyle 0.1 CONFIG QUIET)
@@ -355,6 +356,7 @@ set(UI_SOURCES
     src/ui/actions/onSavedSessionChosen.cpp
     src/ui/actions/onTabMoved.cpp
     src/ui/actions/onTakeScreenshot.cpp
+    src/ui/actions/onPrintScreen.cpp
     src/ui/actions/onReconnect.cpp
     src/ui/actions/onDuplicateSession.cpp
     src/ui/actions/onSaveSession.cpp
@@ -444,6 +446,7 @@ target_link_libraries(5250ng
         Qt6::Core
         Qt6::Widgets
         Qt6::Network
+        Qt6::PrintSupport
         OpenSSL::Crypto
         tn5250::tn5250
         5250script

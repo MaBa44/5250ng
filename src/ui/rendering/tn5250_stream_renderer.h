@@ -38,7 +38,32 @@ class TN5250StreamRenderer {
      */
     void render(const QByteArray &data);
 
+    /**
+     * Render one raw WDSF order (5250 GUI) as extracted by the decoder
+     * adapter: layout 0x15 LEN-hi LEN-lo 0xD9 TYPE ... Renders windows
+     * (with titles/footers), selection fields and scroll bars; remove and
+     * grid-line orders are acknowledged without drawing (the host repaints
+     * the underlying screen, like tn5250j).
+     * @param order Raw order bytes starting at 0x15.
+     * @param cursorRow/cursorCol Host buffer position the order applies to.
+     */
+    void renderWdsfOrder(const QByteArray &order, int cursorRow, int cursorCol);
+
   private:
+    void handleWdsfBytes(const QByteArray &data, int orderStart, int orderEnd,
+                          int cursorRow, int cursorCol,
+                          const ui::widgets::CellAttributes &attr,
+                          ui::widgets::ScreenBuffer *screen);
+    void drawWdsfWindow(const QByteArray &data, int body, int end,
+                        int cursorRow, int cursorCol,
+                        ui::widgets::ScreenBuffer *screen);
+    void drawWdsfSelectionField(const QByteArray &data, int body, int end,
+                                int cursorRow, int cursorCol,
+                                const ui::widgets::CellAttributes &attr,
+                                ui::widgets::ScreenBuffer *screen);
+    void drawWdsfScrollBar(const QByteArray &data, int body, int end,
+                           int cursorRow, int cursorCol,
+                           ui::widgets::ScreenBuffer *screen);
     ui::widgets::Q5250ScreenWidget *m_widget;
 };
 

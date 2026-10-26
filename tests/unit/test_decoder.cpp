@@ -33,6 +33,10 @@ class TestDecoder : public QObject {
     void testInvalidLength();
     void testStateTransitions();
     void testMultipleCommands();
+    void testWdsfOrderEmittedWithCursor();
+    void testWdsfOrderSplitAcrossChunks();
+    void testWdsfOrderSkipsTransparentData();
+    void testNoWdsfOrderNoSignal();
 
   private:
     DecoderAdapter *m_parser;
@@ -43,11 +47,16 @@ class TestDecoder : public QObject {
     QString m_lastError;
     QByteArray m_lastRawData;
     int m_clearCount;
+    QByteArray m_lastWdsf;
+    int m_wdsfRow;
+    int m_wdsfCol;
+    int m_wdsfCount;
 
   private slots:
     void onCommandReceived(TN5250Command cmd, const QByteArray &data);
     void onStructuredFieldReceived(StructuredFieldType type, const QByteArray &data);
     void onWriteStructuredFieldReceived(const QByteArray &data);
+    void onWdsfOrderReceived(const QByteArray &order, int cursorRow, int cursorCol);
     void onParseError(const QString &error);
     void onRawScreenDataReceived(const QByteArray &data);
     void onClearScreenRequested();
@@ -70,6 +79,8 @@ void TestDecoder::init() {
             this, &TestDecoder::onRawScreenDataReceived);
     connect(m_parser, &DecoderAdapter::clearScreenRequested,
             this, &TestDecoder::onClearScreenRequested);
+    connect(m_parser, &DecoderAdapter::wdsfOrderReceived,
+            this, &TestDecoder::onWdsfOrderReceived);
 
     m_lastCommand = static_cast<TN5250Command>(0);
     m_lastData.clear();
@@ -78,6 +89,10 @@ void TestDecoder::init() {
     m_lastError.clear();
     m_lastRawData.clear();
     m_clearCount = 0;
+    m_lastWdsf.clear();
+    m_wdsfRow = -99;
+    m_wdsfCol = -99;
+    m_wdsfCount = 0;
 }
 
 void TestDecoder::cleanup() {
@@ -107,6 +122,13 @@ void TestDecoder::onRawScreenDataReceived(const QByteArray &data) {
 }
 
 void TestDecoder::onClearScreenRequested() { m_clearCount++; }
+
+void TestDecoder::onWdsfOrderReceived(const QByteArray &order, int cursorRow, int cursorCol) {
+    m_lastWdsf = order;
+    m_wdsfRow = cursorRow;
+    m_wdsfCol = cursorCol;
+    m_wdsfCount++;
+}
 
 QByteArray TestDecoder::makeGDS(uint8_t opcode, const QByteArray &payload) {
     QByteArray body;
@@ -260,6 +282,87 @@ void TestDecoder::testMultipleCommands() {
     QCOMPARE(m_clearCount, 1);
     QCOMPARE(m_lastRawData.size(), 2);
     QCOMPARE(static_cast<uint8_t>(m_lastRawData[0]), static_cast<uint8_t>(0xCC));
+}
+
+void TestDecoder::testWdsfOrderEmittedWithCursor() {
+    // WTD: SBA(6,11) + "AB" + WDSF Create Window + "CD".
+    // WDSF layout: 0x15 LEN D9 0x51 flags res depth width + 0x01 minor.
+    const QByteArray wdsf = QByteArray::fromHex("15000CD9510000041404010000");
+    QByteArray displayData;
+    displayData.append('\x11'); // SBA
+    displayData.append('\x06'); // row 6
+    displayData.append('\x0B'); // col 11
+    displayData.append('\xC1'); // A
+    displayData.append('\xC2'); // B
+    displayData.append(wdsf);
+    displayData.append('\xC3'); // C
+    displayData.append('\xC4'); // D
+
+    m_parser->parseData(makeGDS(0x02, makeWTDPayload(displayData)));
+
+    QCOMPARE(m_wdsfCount, 1);
+    QCOMPARE(m_lastWdsf, wdsf);
+    // SBA(6,11) is 0-based (5,10).
+    QCOMPARE(m_wdsfRow, 5);
+    QCOMPARE(m_wdsfCol, 10);
+    // The protocol decoder strips the WDSF order from the display stream.
+    QCOMPARE(m_lastRawData, QByteArray::fromHex("11060BC1C2C3C4"));
+}
+
+void TestDecoder::testWdsfOrderSplitAcrossChunks() {
+    const QByteArray wdsf = QByteArray::fromHex("15000CD9510000041404010000");
+    QByteArray displayData;
+    displayData.append('\x11');
+    displayData.append('\x02');
+    displayData.append('\x03');
+    displayData.append(wdsf);
+    displayData.append('\xC1');
+
+    const QByteArray gds = makeGDS(0x02, makeWTDPayload(displayData));
+    m_parser->parseData(gds.left(9));
+    QCOMPARE(m_wdsfCount, 0);
+    m_parser->parseData(gds.mid(9));
+    QCOMPARE(m_wdsfCount, 1);
+    QCOMPARE(m_lastWdsf, wdsf);
+    QCOMPARE(m_wdsfRow, 1);
+    QCOMPARE(m_wdsfCol, 2);
+}
+
+void TestDecoder::testWdsfOrderSkipsTransparentData() {
+    // TD order (0x10, 1-byte length like the protocol decoder) carrying
+    // 0x15 0x00 0x48 0xD9 as transparent bytes must not fire the signal;
+    // only the real trailing WDSF order fires.
+    const QByteArray wdsf = QByteArray::fromHex("15000CD9510000041404010000");
+    QByteArray displayData;
+    displayData.append('\x11'); // SBA(2,3)
+    displayData.append('\x02');
+    displayData.append('\x03');
+    displayData.append('\x10'); // TD
+    displayData.append('\x04'); // length 4
+    displayData.append('\x15'); // transparent, not an order
+    displayData.append('\x00');
+    displayData.append('\x48');
+    displayData.append('\xD9');
+    displayData.append(wdsf);
+    displayData.append('\xC1');
+
+    m_parser->parseData(makeGDS(0x02, makeWTDPayload(displayData)));
+
+    QCOMPARE(m_wdsfCount, 1);
+    QCOMPARE(m_lastWdsf, wdsf);
+    QCOMPARE(m_wdsfRow, 1);
+    QCOMPARE(m_wdsfCol, 2);
+}
+
+void TestDecoder::testNoWdsfOrderNoSignal() {
+    QByteArray displayData;
+    displayData.append('\xC1');
+    displayData.append('\xC2');
+
+    m_parser->parseData(makeGDS(0x02, makeWTDPayload(displayData)));
+
+    QCOMPARE(m_wdsfCount, 0);
+    QVERIFY(m_lastWdsf.isEmpty());
 }
 
 QTEST_MAIN(TestDecoder)
