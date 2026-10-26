@@ -1,6 +1,9 @@
 name: Build Windows installer
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - .github/workflows/build-installer.yml
 
 jobs:
   installer:
