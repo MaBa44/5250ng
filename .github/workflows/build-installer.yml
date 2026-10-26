@@ -25,7 +25,6 @@ jobs:
         run: vcpkg install openssl:x64-windows
 
       - name: Configure CMake
-        shell: pwsh
         run: >
           cmake -S . -B build
           -DCMAKE_BUILD_TYPE=Release
