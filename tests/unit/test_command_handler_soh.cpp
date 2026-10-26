@@ -410,9 +410,11 @@ void TestCommandHandlerSoh::testWdsfCreateWindowDrawsBorderAndTitle() {
 
 void TestCommandHandlerSoh::testWdsfSelectionFieldWritesChoices() {
     // WDSF Define Selection Field (0xD9 0x50) with one choice "ONE".
+    // Header (16 bytes): f1-f3, typeSel, guiDev, with/noMnem, res, res,
+    // textCols, textRows, maxColChoice, padding, numSep, ctySep, cancelAID.
     const QByteArray order = QByteArray::fromHex(
         "15001CD950"
-        "00000000000000000A02010000000000"
+        "00000000000000000A020100000000"
         "0810000000D6D5C5");
     auto *screen = m_widget->screenBuffer();
     m_handler->onWdsfOrderReceived(order, 5, 10);
