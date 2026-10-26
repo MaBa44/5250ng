@@ -138,6 +138,8 @@ void TN5250CommandHandler::connectDecoder(tn5250::client::DecoderAdapter *parser
             this, &TN5250CommandHandler::onReadScreenRequested);
     connect(parser, &tn5250::client::DecoderAdapter::writeStructuredFieldReceived,
             this, &TN5250CommandHandler::onWriteStructuredFieldReceived);
+    connect(parser, &tn5250::client::DecoderAdapter::wdsfOrderReceived,
+            this, &TN5250CommandHandler::onWdsfOrderReceived);
     connect(parser, &tn5250::client::DecoderAdapter::strpccmdRequested,
             this, &TN5250CommandHandler::onStrpccmdRequested);
 }
@@ -866,6 +868,29 @@ void TN5250CommandHandler::onWriteStructuredFieldReceived(const QByteArray &data
     }
     LOG_DEBUG(QString("CommandHandler: Unhandled Write Structured Field (%1 bytes)")
         .arg(data.size()));
+}
+
+void TN5250CommandHandler::onWdsfOrderReceived(const QByteArray &order, int cursorRow, int cursorCol) {
+    if (!m_displayWidget || !m_displayWidget->screenBuffer() || !m_renderer) {
+        return;
+    }
+    // Minimum layout: 0x15 LEN-hi LEN-lo 0xD9 TYPE.
+    if (order.size() < 5) {
+        LOG_DEBUG("CommandHandler: Truncated WDSF order ignored");
+        return;
+    }
+    // When the adapter saw no SBA/MC/IC before the order, fall back to the
+    // widget cursor (host activity is usually near it).
+    int row = cursorRow;
+    int col = cursorCol;
+    if (row < 0 || col < 0) {
+        const QPoint cur = m_displayWidget->screenBuffer()->cursorPosition();
+        row = cur.y();
+        col = cur.x();
+    }
+    LOG_DEBUG(QString("CommandHandler: WDSF order type=0x%1 at (%2,%3)")
+        .arg(static_cast<uint8_t>(order[4]), 2, 16, QChar('0')).arg(row).arg(col));
+    m_renderer->renderWdsfOrder(order, row, col);
 }
 
 void TN5250CommandHandler::onStrpccmdRequested(bool noWait,

@@ -56,6 +56,15 @@ class DecoderAdapter : public QObject {
     void messageLightOff();
     void readScreenRequested(bool includeAttributes);
     void writeStructuredFieldReceived(const QByteArray &data);
+    // Fires for a Write-To-Display Structured Field order (0x15) found inside
+    // a Write-To-Display command. The protocol decoder (protocol-tn5250
+    // submodule) strips WDSF orders from the display stream, so this adapter
+    // pre-scans complete GDS records and reports the raw order bytes
+    // (layout on the wire: 0x15 LEN-hi LEN-lo 0xD9 TYPE ...) before handing
+    // the data to the decoder. cursorRow/cursorCol is the host buffer
+    // position from the last SBA/MC/IC order in the same WTD command, or
+    // -1/-1 when no absolute position precedes the order.
+    void wdsfOrderReceived(const QByteArray &order, int cursorRow, int cursorCol);
     // Fires when the host's WTD stream contains the STRPCCMD marker. Carries
     // the wait flag (true → no-wait, EBCDIC 'a' / 0x81) and the raw EBCDIC
     // command bytes consumed by the protocol decoder from immediately after
@@ -66,6 +75,17 @@ class DecoderAdapter : public QObject {
 
   private:
     Decoder m_decoder;
+    // Unprocessed GDS bytes held back for the WDSF pre-scan: extraction only
+    // runs on complete records so orders split across TCP chunks are still
+    // reported exactly once with correct framing.
+    QByteArray m_pending;
+
+    // Scan complete GDS records in m_pending (plus new data) for WDSF orders
+    // and emit wdsfOrderReceived for each one found.
+    void extractWdsfOrders(const QByteArray &data);
+    // Walk one GDS record payload, emitting wdsfOrderReceived for every
+    // WDSF order with the cursor from the last SBA/MC/IC in its WTD command.
+    void scanRecordPayloadForWdsf(const uint8_t *rec, int start, int end);
 };
 
 } // namespace tn5250::client

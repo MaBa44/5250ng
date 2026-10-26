@@ -152,6 +152,7 @@ void MainWindow::setupMenuBar() {
     // Tools menu
     QMenu *toolsMenu = bar->addMenu("&Tools");
     toolsMenu->addAction("&Take a Screenshot", this, &MainWindow::onTakeScreenshot);
+    toolsMenu->addAction("Print Screen...", this, &MainWindow::onPrintScreen);
     m_cursorRulesAction = toolsMenu->addAction("Show &cursor rules", this, &MainWindow::onToggleCursorRules);
     m_cursorRulesAction->setCheckable(true);
     m_sessionLoggingAction = toolsMenu->addAction("Session &Logging", this, &MainWindow::onToggleSessionLogging);

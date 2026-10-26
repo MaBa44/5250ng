@@ -85,6 +85,11 @@ class TN5250CommandHandler : public QObject {
     void onMessageLightOff();
     void onReadScreenRequested(bool includeAttributes);
     void onWriteStructuredFieldReceived(const QByteArray &data);
+    // WDSF order (0x15, 5250 GUI) extracted by the decoder adapter with the
+    // host cursor from the preceding SBA/MC/IC (-1/-1 when unknown, in which
+    // case the widget cursor is used). Renders windows, selection fields and
+    // scroll bars; grid-line orders are only logged like tn5250j does.
+    void onWdsfOrderReceived(const QByteArray &order, int cursorRow, int cursorCol);
     // STRPCCMD: host has asked us to run a workstation-side command. Receives
     // the wait flag and raw EBCDIC command bytes consumed by the protocol
     // decoder from the wire (immediately after the 10-byte PCO marker),

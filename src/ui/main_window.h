@@ -112,6 +112,7 @@ class MainWindow : public MainWindowBase {
     void onNewSession();
     void onAbout();
     void onTakeScreenshot();
+    void onPrintScreen();
     void onToggleCursorRules();
     void onToggleFieldProtection();
     void onToggleInputFields();

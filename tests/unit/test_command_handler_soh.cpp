@@ -57,6 +57,12 @@ class TestCommandHandlerSoh : public QObject {
     void testClearUnitSwitchesBackTo24x80();
     void testClearUnitFrom27x132ReturnsTo24x80();
 
+    // 5250 GUI (WDSF order 0x15) rendering.
+    void testWdsfCreateWindowDrawsBorderAndTitle();
+    void testWdsfSelectionFieldWritesChoices();
+    void testWdsfGridLinesIgnored();
+    void testWdsfRemoveAllKeepsScreen();
+
   private:
     Q5250ScreenWidget *m_widget = nullptr;
     TN5250CommandHandler *m_handler = nullptr;
@@ -379,6 +385,63 @@ void TestCommandHandlerSoh::testClearUnitFrom27x132ReturnsTo24x80() {
     m_handler->onClearScreenRequested();
     QCOMPARE(m_widget->screenBuffer()->rows(), 24);
     QCOMPARE(m_widget->screenBuffer()->cols(), 80);
+}
+
+void TestCommandHandlerSoh::testWdsfCreateWindowDrawsBorderAndTitle() {
+    // WDSF Create Window (0x15 LEN 0xD9 0x51) at (5,10), depth 4, width 20,
+    // with a centered header title "HI " (EBCDIC 0xC8 0xC9 0x40).
+    const QByteArray order = QByteArray::fromHex("150011D95100000414"
+                                                 "091000000000C8C940");
+    auto *screen = m_widget->screenBuffer();
+    m_handler->onWdsfOrderReceived(order, 5, 10);
+
+    // Top border row 4: corners + horizontal fill...
+    QCOMPARE(screen->cell(4, 9).character, static_cast<uint8_t>(0x4B)); // '.'
+    QCOMPARE(screen->cell(4, 10).character, static_cast<uint8_t>(0x60)); // '-'
+    QCOMPARE(screen->cell(4, 30).character, static_cast<uint8_t>(0x4B)); // '.'
+    // ...with the title centered: startCol = 10 + (20 - 3) / 2 = 18.
+    QCOMPARE(screen->cell(4, 18).character, static_cast<uint8_t>(0xC8)); // 'H'
+    QCOMPARE(screen->cell(4, 19).character, static_cast<uint8_t>(0xC9)); // 'I'
+    // Side + bottom borders.
+    QCOMPARE(screen->cell(5, 9).character, static_cast<uint8_t>(0x4F)); // '|'
+    QCOMPARE(screen->cell(5, 30).character, static_cast<uint8_t>(0x4F)); // '|'
+    QCOMPARE(screen->cell(9, 10).character, static_cast<uint8_t>(0x60)); // '-'
+}
+
+void TestCommandHandlerSoh::testWdsfSelectionFieldWritesChoices() {
+    // WDSF Define Selection Field (0xD9 0x50) with one choice "ONE".
+    // Header (16 bytes): f1-f3, typeSel, guiDev, with/noMnem, res, res,
+    // textCols, textRows, maxColChoice, padding, numSep, ctySep, cancelAID.
+    const QByteArray order = QByteArray::fromHex(
+        "15001CD950"
+        "0000000000000000000A020100000000"
+        "0810000000D6D5C5");
+    auto *screen = m_widget->screenBuffer();
+    m_handler->onWdsfOrderReceived(order, 5, 10);
+
+    // '.' selection marker + text at col+3, like tn5250j lays choices out.
+    QCOMPARE(screen->cell(5, 10).character, static_cast<uint8_t>(0x4B)); // '.'
+    QCOMPARE(screen->cell(5, 13).character, static_cast<uint8_t>(0xD6)); // 'O'
+    QCOMPARE(screen->cell(5, 14).character, static_cast<uint8_t>(0xD5)); // 'N'
+    QCOMPARE(screen->cell(5, 15).character, static_cast<uint8_t>(0xC5)); // 'E'
+}
+
+void TestCommandHandlerSoh::testWdsfGridLinesIgnored() {
+    // Grid lines (0xD9/0x60) are unsupported and must be skipped silently,
+    // mirroring tn5250j: no crash, no screen change.
+    auto *screen = m_widget->screenBuffer();
+    const uint8_t before = screen->cell(0, 0).character;
+    m_handler->onWdsfOrderReceived(QByteArray::fromHex("150006D9600000"), 5, 10);
+    QCOMPARE(screen->cell(0, 0).character, before);
+}
+
+void TestCommandHandlerSoh::testWdsfRemoveAllKeepsScreen() {
+    // Remove All GUI (0xD9/0x5F): nothing to erase locally, the host
+    // repaints the underlying screen; the call must be a safe no-op.
+    auto *screen = m_widget->screenBuffer();
+    const uint8_t before = screen->cell(12, 40).character;
+    m_handler->onWdsfOrderReceived(QByteArray::fromHex("150004D95F"), 5, 10);
+    QCOMPARE(screen->cell(12, 40).character, before);
 }
 
 QTEST_MAIN(TestCommandHandlerSoh)
