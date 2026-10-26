@@ -414,7 +414,7 @@ void TestCommandHandlerSoh::testWdsfSelectionFieldWritesChoices() {
     // textCols, textRows, maxColChoice, padding, numSep, ctySep, cancelAID.
     const QByteArray order = QByteArray::fromHex(
         "15001CD950"
-        "00000000000000000A020100000000"
+        "0000000000000000000A020100000000"
         "0810000000D6D5C5");
     auto *screen = m_widget->screenBuffer();
     m_handler->onWdsfOrderReceived(order, 5, 10);
