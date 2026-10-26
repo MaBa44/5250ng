@@ -91,6 +91,15 @@ int skipSfOrder(const uint8_t *rec, int k, int end) {
 
 } // namespace
 
+static QByteArray toQt(const std::vector<uint8_t> &v) {
+    return QByteArray(reinterpret_cast<const char *>(v.data()), static_cast<int>(v.size()));
+}
+
+static std::vector<uint8_t> fromQt(const QByteArray &ba) {
+    return std::vector<uint8_t>(reinterpret_cast<const uint8_t *>(ba.constData()),
+                                reinterpret_cast<const uint8_t *>(ba.constData()) + ba.size());
+}
+
 void DecoderAdapter::parseData(const QByteArray &data) {
     extractWdsfOrders(data);
     m_decoder.parseData(fromQt(data));
@@ -224,15 +233,6 @@ void DecoderAdapter::scanRecordPayloadForWdsf(const uint8_t *rec, int start, int
         }
         i = j;
     }
-}
-
-static QByteArray toQt(const std::vector<uint8_t> &v) {
-    return QByteArray(reinterpret_cast<const char *>(v.data()), static_cast<int>(v.size()));
-}
-
-static std::vector<uint8_t> fromQt(const QByteArray &ba) {
-    return std::vector<uint8_t>(reinterpret_cast<const uint8_t *>(ba.constData()),
-                                 reinterpret_cast<const uint8_t *>(ba.constData()) + ba.size());
 }
 
 DecoderAdapter::DecoderAdapter(QObject *parent) : QObject(parent) {
